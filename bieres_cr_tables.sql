@@ -63,6 +63,7 @@ insert into buveur(idbuveur, nomb, prenomb) values(3, 'DeNice', 'Brice');
 insert into buveur(idbuveur, nomb, prenomb) values(4, 'Bricot', 'Juda');
 insert into buveur(idbuveur, nomb, prenomb) values(5, 'Meurdesoif', 'Jean');
 insert into buveur(idbuveur, nomb, prenomb) values(6, 'Kollyck', 'Al');
+insert into buveur(idbuveur, nomb, prenomb) values(7, 'test', 'maxperrot');
 
 insert into biere(idbiere,nombiere,degre,typebiere) values(1, 'kronembourg', 4, 'pils');
 insert into biere(idbiere,nombiere,degre,typebiere) values(2, 'pilsener', 3, 'pils');
@@ -94,6 +95,8 @@ insert into frequenter(idbuveur, idbar) values(5, 3);
 insert into frequenter(idbuveur, idbar) values(5, 4); 
 insert into frequenter(idbuveur, idbar) values(5, 5); 
 insert into frequenter(idbuveur, idbar) values(6, 2);
+insert into frequenter(idbuveur, idbar) values(7, 5); 
+insert into frequenter(idbuveur, idbar) values(7, 2);
 
 insert into servir(idbar, idbiere) values(1, 1);
 insert into servir(idbar, idbiere) values(1, 3);
@@ -125,7 +128,11 @@ insert into aimer(idbuveur, idbiere) values(4, 1);
 insert into aimer(idbuveur, idbiere) values(6, 1);
 insert into aimer(idbuveur, idbiere) values(6, 3);
 insert into aimer(idbuveur, idbiere) values(6, 5);
+insert into aimer(idbuveur, idbiere) values(7, 2);
+insert into aimer(idbuveur, idbiere) values(7, 4);
+insert into aimer(idbuveur, idbiere) values(7, 5);
 
+-- EXERCICE 1 
 ALTER TABLE bieres.buveur
 ADD COLUMN login VARCHAR(50) UNIQUE;
 
@@ -140,11 +147,13 @@ DROP CONSTRAINT IF EXISTS buveur_login_key;
 ALTER TABLE bieres.buveur
 ADD CONSTRAINT buveur_login_key UNIQUE (login);
 
+-- Créer vue mes infos
 CREATE VIEW bieres.mes_infos AS
 SELECT idbuveur, nomb, prenomb, login
 FROM bieres.buveur
 WHERE login = CURRENT_USER;
 
+-- Créer vue mes bieres
 CREATE VIEW bieres.mes_bieres AS
 SELECT bieres.biere.idbiere, bieres.biere.nombiere, bieres.biere.degre, bieres.biere.typebiere
 FROM bieres.biere
@@ -152,9 +161,14 @@ JOIN bieres.aimer ON bieres.biere.idbiere = bieres.aimer.idbiere
 JOIN bieres.buveur ON bieres.aimer.idbuveur = bieres.buveur.idbuveur
 WHERE bieres.buveur.login = CURRENT_USER;
 
+-- Attribuer droits (test pour public)
+-- GRANT SELECT ON bieres.mes_infos TO PUBLIC;
+-- GRANT SELECT ON bieres.mes_bieres TO PUBLIC;
+
 SELECT * FROM bieres.mes_infos;
 SELECT * FROM bieres.mes_bieres;
 
+-- Nouvelle vue pour remplacer la table fréquenter
 CREATE VIEW bieres.new_frequenter AS
 SELECT b.idbuveur, bar.idbar
 FROM bieres.buveur b
@@ -163,3 +177,17 @@ JOIN bieres.servir servir ON aimer.idbiere = servir.idbiere
 JOIN bieres.bar bar ON servir.idbar = bar.idbar;
 
 SELECT * FROM bieres.new_frequenter;
+
+-- EXERCICE 3 Trigger pour modification de degrealcool
+CREATE OR REPLACE FUNCTION modifmaxdegrealcool() RETURNS TRIGGER AS $test$
+	BEGIN
+		EXCEPT "Vous ne pouvez pas modifier le degré d'alcool d'une bière de plus d'1 degré à la fois.";
+	END;
+$test$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER degrealcoolmax
+BEFORE INSERT OR UPDATE
+ON bieres FOR EACH ROW
+WHEN (ABS(NEW.degrealcool - OLD.degrealcool) > 1)
+EXECUTE maxmodifdegrealcool;
+

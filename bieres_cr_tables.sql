@@ -179,7 +179,10 @@ JOIN bieres.bar bar ON servir.idbar = bar.idbar;
 SELECT * FROM bieres.new_frequenter;
 
 -- EXERCICE 3 Trigger pour modification de degrealcool
-CREATE OR REPLACE FUNCTION modifmaxdegrealcool() RETURNS TRIGGER AS $test$
+-- Partie 1
+
+-- TODO: Test this trigger
+CREATE OR REPLACE FUNCTION modifMaxDegreAlcool() RETURNS TRIGGER AS $test$
 	BEGIN
 		EXCEPT 'Vous ne pouvez pas modifier le degré d''alcool d''une bière de plus d''1 degré à la fois.';
 	END;
@@ -189,5 +192,28 @@ CREATE OR REPLACE TRIGGER degrealcoolmax
 BEFORE INSERT OR UPDATE
 ON bieres FOR EACH ROW
 WHEN (ABS(NEW.degrealcool - OLD.degrealcool) > 1)
-EXECUTE maxmodifdegrealcool;
+EXECUTE modifMaxDegreAlcool;
+
+-- Partie 2 
+
+CREATE OR REPLACE FUNCTION modifMaxDegreAlcoolWithAuth() RETURNS TRIGGER AS $test$
+	BEGIN
+		EXCEPT 'Vous ne pouvez pas modifier le degré d''alcool d''une bière de plus d''1 degré à la fois.';
+	END;
+$test$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE TRIGGER degrealcoolmax
+BEFORE INSERT OR UPDATE
+ON bieres FOR EACH ROW
+WHEN ((ABS(NEW.degrealcool - OLD.degrealcool) > 1) AND ( <INSERER ICI> )) -- TODO Vérifier que l'user faisant la modification est amateur de cette bière
+-- pour ça : vérifier que le current user est dans la jointure naturelle de aimer la biere en question et le login
+
+-- TODO: vérifier que current user est dans ce select et que 
+SELECT idbuveur
+FROM aimer 
+NATURAL JOIN buveurs 
+WHERE aimer.biere = OLD.idbiere 
+
+
+EXECUTE modifMaxDegreAlcoolWithAuth;
 

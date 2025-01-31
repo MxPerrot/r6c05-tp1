@@ -181,7 +181,7 @@ SELECT * FROM bieres.new_frequenter;
 -- EXERCICE 3 Trigger pour modification de degrealcool
 CREATE OR REPLACE FUNCTION modifmaxdegrealcool() RETURNS TRIGGER AS $test$
 	BEGIN
-		EXCEPT "Vous ne pouvez pas modifier le degré d'alcool d'une bière de plus d'1 degré à la fois.";
+		EXCEPT 'Vous ne pouvez pas modifier le degré d''alcool d''une bière de plus d''1 degré à la fois.';
 	END;
 $test$ LANGUAGE plpgsql;
 

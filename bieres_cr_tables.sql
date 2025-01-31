@@ -125,3 +125,41 @@ insert into aimer(idbuveur, idbiere) values(4, 1);
 insert into aimer(idbuveur, idbiere) values(6, 1);
 insert into aimer(idbuveur, idbiere) values(6, 3);
 insert into aimer(idbuveur, idbiere) values(6, 5);
+
+ALTER TABLE bieres.buveur
+ADD COLUMN login VARCHAR(50) UNIQUE;
+
+-- Mettre à jour les login des buveurs avec des valeurs uniques (par exemple, les prénoms)
+UPDATE bieres.buveur
+SET login = prenomb;
+
+-- Assurer que login est bien une clé candidate
+ALTER TABLE bieres.buveur
+DROP CONSTRAINT IF EXISTS buveur_login_key;
+
+ALTER TABLE bieres.buveur
+ADD CONSTRAINT buveur_login_key UNIQUE (login);
+
+CREATE VIEW bieres.mes_infos AS
+SELECT idbuveur, nomb, prenomb, login
+FROM bieres.buveur
+WHERE login = CURRENT_USER;
+
+CREATE VIEW bieres.mes_bieres AS
+SELECT bieres.biere.idbiere, bieres.biere.nombiere, bieres.biere.degre, bieres.biere.typebiere
+FROM bieres.biere
+JOIN bieres.aimer ON bieres.biere.idbiere = bieres.aimer.idbiere
+JOIN bieres.buveur ON bieres.aimer.idbuveur = bieres.buveur.idbuveur
+WHERE bieres.buveur.login = CURRENT_USER;
+
+SELECT * FROM bieres.mes_infos;
+SELECT * FROM bieres.mes_bieres;
+
+CREATE VIEW bieres.new_frequenter AS
+SELECT b.idbuveur, bar.idbar
+FROM bieres.buveur b
+JOIN bieres.aimer aimer ON b.idbuveur = aimer.idbuveur
+JOIN bieres.servir servir ON aimer.idbiere = servir.idbiere
+JOIN bieres.bar bar ON servir.idbar = bar.idbar;
+
+SELECT * FROM bieres.new_frequenter;

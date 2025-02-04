@@ -229,4 +229,71 @@ FOR EACH ROW
 WHEN (OLD.degre IS DISTINCT FROM NEW.degre)
 EXECUTE FUNCTION update_degre_alcool();
 
+-- Exercice 3
 
+-- Partie 1 création des tables
+CREATE TABLE buveurs_amateurs (
+    idbuveur numeric(3) PRIMARY KEY,
+    login varchar(20) NOT NULL,
+    nomb varchar(30) NOT NULL,
+    prenomb varchar(30) NOT NULL
+);
+
+CREATE TABLE buveurs_pros (
+    idbuveur numeric(3) PRIMARY KEY,
+    login varchar(20) NOT NULL,
+    nomb varchar(30) NOT NULL,
+    prenomb varchar(30) NOT NULL,
+    idbar_prefere numeric(3) NOT NULL
+);
+
+CREATE VIEW toutbuveur (idbuveur, login, nomb, prenomb, idbar_prefere, nature)
+AS 
+SELECT idbuveur, login, nomb, prenomb, idbar_prefere, 'P'
+FROM buveurs_pros
+UNION
+SELECT idbuveur, login, nomb, prenomb, NULL, 'A'
+FROM buveurs_amateurs;
+
+-- Partie 2 Implémentation du Trigger INSTEAD OF INSERT
+CREATE OR REPLACE FUNCTION insert_toutbuveur()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.nature NOT IN ('P', 'A') THEN
+        RAISE EXCEPTION 'Valeur incorrecte pour nature. Utiliser ''P'' pour professionnel ou ''A'' pour amateur.';
+    END IF;
+        IF NEW.nature = 'P' THEN
+        IF NEW.idbar_prefere IS NULL THEN
+            RAISE EXCEPTION 'Les buveurs professionnels doivent avoir un bar préféré (idbar_prefere non NULL).';
+        END IF;
+        
+        INSERT INTO buveurs_pros (idbuveur, login, nomb, prenomb, idbar_prefere)
+        VALUES (NEW.idbuveur, NEW.login, NEW.nomb, NEW.prenomb, NEW.idbar_prefere);
+        
+    ELSIF NEW.nature = 'A' THEN
+        IF NEW.idbar_prefere IS NOT NULL THEN
+            RAISE EXCEPTION 'Les buveurs amateurs ne doivent pas avoir de bar préféré (idbar_prefere doit être NULL).';
+        END IF;
+        
+        INSERT INTO buveurs_amateurs (idbuveur, login, nomb, prenomb)
+        VALUES (NEW.idbuveur, NEW.login, NEW.nomb, NEW.prenomb);
+    END IF;
+
+	INSERT INTO buveur (idbuveur, login, nomb, prenomb)
+	VALUES (NEW.idbuveur, NEW.login, NEW.nomb, NEW.prenomb);
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_insert_toutbuveur
+INSTEAD OF INSERT ON toutbuveur
+FOR EACH ROW
+EXECUTE FUNCTION insert_toutbuveur();
+
+-- INSERT INTO toutbuveur VALUES(100, 'xxx', 'Ture', 'Tobby', 1, 'P'); -- Fonctionne
+-- INSERT INTO toutbuveur VALUES(101, 'yyy', 'Dupond', 'Dédé', null, 'A'); -- Fonctionne
+-- INSERT INTO toutbuveur VALUES(102, 'xxx', 'Ture', 'Tobby', 1, 'P'); -- Renvoit une erreur : login 'xxx' existe déjà
+-- INSERT INTO toutbuveur VALUES(102, 'xxx', 'Ture', 'Tobby', 1, 'X'); -- Renvoit une erreur : 'X' n'est pas une valeur valable 
+-- INSERT INTO toutbuveur VALUES(103, 'xxx', 'Ture', 'Tobby', null, 'P'); -- Renvoit une erreur : ne peut pas avoir null
+-- INSERT INTO toutbuveur VALUES(104, 'yyy', 'Dupond', 'Dédé', 1, 'A'); -- Renvoit une erreur : doit avoir null, pas 1

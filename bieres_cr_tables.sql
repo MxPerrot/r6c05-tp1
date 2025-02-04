@@ -132,7 +132,13 @@ insert into aimer(idbuveur, idbiere) values(7, 2);
 insert into aimer(idbuveur, idbiere) values(7, 4);
 insert into aimer(idbuveur, idbiere) values(7, 5);
 
--- EXERCICE 1 
+-- Attribuer tous les droits à tous les utilisateurs
+GRANT USAGE, CREATE ON SCHEMA bieres TO PUBLIC;
+ALTER DEFAULT PRIVILEGES IN SCHEMA bieres GRANT ALL ON TABLES TO PUBLIC;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA bieres TO PUBLIC;
+
+-- EXERCICE 1: Vues et confidentialité des données
+
 ALTER TABLE bieres.buveur
 ADD COLUMN login VARCHAR(50) UNIQUE;
 
@@ -161,12 +167,11 @@ JOIN bieres.aimer ON bieres.biere.idbiere = bieres.aimer.idbiere
 JOIN bieres.buveur ON bieres.aimer.idbuveur = bieres.buveur.idbuveur
 WHERE bieres.buveur.login = CURRENT_USER;
 
--- Attribuer droits (test pour public)
--- GRANT SELECT ON bieres.mes_infos TO PUBLIC;
--- GRANT SELECT ON bieres.mes_bieres TO PUBLIC;
 
 SELECT * FROM bieres.mes_infos;
 SELECT * FROM bieres.mes_bieres;
+
+-- EXERCICE 2: Indépendance logique grâce aux vues
 
 -- Nouvelle vue pour remplacer la table fréquenter
 CREATE VIEW bieres.new_frequenter AS
@@ -178,42 +183,50 @@ JOIN bieres.bar bar ON servir.idbar = bar.idbar;
 
 SELECT * FROM bieres.new_frequenter;
 
--- EXERCICE 3 Trigger pour modification de degrealcool
--- Partie 1
+-- EXERCICE 3: Trigger pour modification de degrealcool
 
--- TODO: Test this trigger
-CREATE OR REPLACE FUNCTION modifMaxDegreAlcool() RETURNS TRIGGER AS $test$
-	BEGIN
-		EXCEPT 'Vous ne pouvez pas modifier le degré d''alcool d''une bière de plus d''1 degré à la fois.';
-	END;
-$test$ LANGUAGE plpgsql;
+-- Création de la fonction pour le trigger
+CREATE OR REPLACE FUNCTION update_degre_alcool()
+RETURNS TRIGGER AS $$
+DECLARE
+    user_id INTEGER;
+BEGIN
+    -- Récupérer l'id du buveur correspondant à l'utilisateur actuel
+    SELECT idbuveur INTO user_id FROM bieres.buveur WHERE login = CURRENT_USER;
+    
+    -- Vérifier si l'utilisateur existe dans la table buveur
+    IF user_id IS NULL THEN
+        RAISE EXCEPTION 'L''utilisateur n''est pas enregistré dans la table buveur.';
+    END IF;
 
-CREATE OR REPLACE TRIGGER degrealcoolmax
-BEFORE INSERT OR UPDATE
-ON bieres FOR EACH ROW
-WHEN (ABS(NEW.degrealcool - OLD.degrealcool) > 1)
-EXECUTE modifMaxDegreAlcool;
+    -- Vérifier que l'utilisateur aime la bière qu'il essaie de modifier
+    IF NOT EXISTS (
+        SELECT 1 FROM bieres.aimer
+        WHERE idbuveur = user_id AND idbiere = NEW.idbiere
+    ) THEN
+        RAISE EXCEPTION 'Vous ne pouvez modifier le degré d''alcool que des bières que vous aimez.';
+    END IF;
 
--- Partie 2 
+    -- Vérifier que la modification du degré d'alcool ne dépasse pas ±1°
+    IF ABS(NEW.degre - OLD.degre) > 1 THEN
+        RAISE EXCEPTION 'Vous ne pouvez modifier le degré d''alcool que de ±1° à la fois.';
+    END IF;
 
-CREATE OR REPLACE FUNCTION modifMaxDegreAlcoolWithAuth() RETURNS TRIGGER AS $test$
-	BEGIN
-		EXCEPT 'Vous ne pouvez pas modifier le degré d''alcool d''une bière de plus d''1 degré à la fois.';
-	END;
-$test$ LANGUAGE plpgsql;
+    -- Vérifier que le nouveau degré d'alcool n'est pas inférieur à 0
+    IF NEW.degre < 0 THEN
+        RAISE EXCEPTION 'Le degré d''alcool ne peut pas être inférieur à 0.';
+    END IF;
 
-CREATE OR REPLACE TRIGGER degrealcoolmax
-BEFORE INSERT OR UPDATE
-ON bieres FOR EACH ROW
-WHEN ((ABS(NEW.degrealcool - OLD.degrealcool) > 1) AND ( <INSERER ICI> )) -- TODO Vérifier que l'user faisant la modification est amateur de cette bière
--- pour ça : vérifier que le current user est dans la jointure naturelle de aimer la biere en question et le login
+    -- Si toutes les conditions sont respectées, accepter la modification
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
--- TODO: vérifier que current user est dans ce select et que 
-SELECT idbuveur
-FROM aimer 
-NATURAL JOIN buveurs 
-WHERE aimer.biere = OLD.idbiere 
+-- Create the trigger to apply this function before an update on biere.degre
+CREATE TRIGGER update_degre_alcool_restriction
+BEFORE UPDATE ON bieres.biere
+FOR EACH ROW
+WHEN (OLD.degre IS DISTINCT FROM NEW.degre)
+EXECUTE FUNCTION update_degre_alcool();
 
-
-EXECUTE modifMaxDegreAlcoolWithAuth;
 

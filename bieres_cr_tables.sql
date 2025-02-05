@@ -222,14 +222,14 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Create the trigger to apply this function before an update on biere.degre
+-- Création d’un trigger pour appeler cette fonction en cas d’update sur bieres.biere
 CREATE TRIGGER update_degre_alcool_restriction
 BEFORE UPDATE ON bieres.biere
 FOR EACH ROW
 WHEN (OLD.degre IS DISTINCT FROM NEW.degre)
 EXECUTE FUNCTION update_degre_alcool();
 
--- Exercice 3
+-- Exercice 4
 
 -- Partie 1 création des tables
 CREATE TABLE buveurs_amateurs (
@@ -297,3 +297,71 @@ EXECUTE FUNCTION insert_toutbuveur();
 -- INSERT INTO toutbuveur VALUES(102, 'xxx', 'Ture', 'Tobby', 1, 'X'); -- Renvoit une erreur : 'X' n'est pas une valeur valable 
 -- INSERT INTO toutbuveur VALUES(103, 'xxx', 'Ture', 'Tobby', null, 'P'); -- Renvoit une erreur : ne peut pas avoir null
 -- INSERT INTO toutbuveur VALUES(104, 'yyy', 'Dupond', 'Dédé', 1, 'A'); -- Renvoit une erreur : doit avoir null, pas 1
+
+
+CREATE TABLE audit_biere (
+    idbiere VARCHAR(10), -- Peut être 'ABS' si l'id est absent
+    action VARCHAR(3) NOT NULL, -- 'INS', 'DES', 'AUG', 'DIM'
+    utilisateur VARCHAR(50) NOT NULL,
+    date_action TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE OR REPLACE FUNCTION log_biere_modifications()
+RETURNS TRIGGER AS $$
+DECLARE
+    ancienne_valeur INTEGER;
+    nouvelle_valeur INTEGER;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        INSERT INTO audit_biere (idbiere, action, utilisateur, date_action)
+        VALUES (OLD.idbiere, 'DES', CURRENT_USER, CURRENT_TIMESTAMP);
+    
+    ELSIF TG_OP = 'INSERT' THEN
+        INSERT INTO audit_biere (idbiere, action, utilisateur, date_action)
+        VALUES (COALESCE(NEW.idbiere::TEXT, 'ABS'), 'INS', CURRENT_USER, CURRENT_TIMESTAMP);
+    
+    ELSIF TG_OP = 'UPDATE' THEN
+        IF OLD.degre <> NEW.degre THEN
+            ancienne_valeur := OLD.degre;
+            nouvelle_valeur := NEW.degre;
+            
+            INSERT INTO audit_biere (idbiere, action, utilisateur, date_action)
+            VALUES (
+                OLD.idbiere,
+                CASE 
+                    WHEN nouvelle_valeur > ancienne_valeur THEN 'AUG'
+                    ELSE 'DIM'
+                END,
+                CURRENT_USER,
+                CURRENT_TIMESTAMP
+            );
+        END IF;
+    END IF;
+
+    RETURN NULL; 
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_log_biere
+AFTER INSERT OR DELETE OR UPDATE ON biere
+FOR EACH ROW
+EXECUTE FUNCTION log_biere_modifications();
+
+-- TEST
+
+-- Ajout d'une bière
+INSERT INTO biere (idbiere, nombiere, degre, typebiere) 
+VALUES (10, 'Guinness', 5, 'Stout');
+
+-- Ajout d'une bière sans id --> ERREUR
+INSERT INTO biere (idbiere, nombiere, degre, typebiere) 
+VALUES (NULL, 'Bière Mystère', 6, 'Blonde');
+
+-- Augmentation du degré d'alcool de la bière 2 (aimée par utilisateur 'maxperrot')
+UPDATE biere SET degre = 7 WHERE idbiere = 2; 
+
+-- Diminution  du degré d'alcool de la bière 10 
+UPDATE biere SET degre = 6 WHERE idbiere = 2;
+
+DELETE FROM biere WHERE idbiere = 10;
+SELECT * FROM audit_biere;
